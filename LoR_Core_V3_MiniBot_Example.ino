@@ -393,7 +393,7 @@ void setup() {
   ConfigureMotorOutput(9, N20Plus, 90);
   ConfigureMotorOutput(10, N20Plus, 90);
   ConfigureMotorOutput(11, N20Plus, 90);
-  ConfigureMotorOutput(12, MG90_CR, 90);
+  ConfigureMotorOutput(12, N20Plus, 90);
 
   // --- System Start Complete ---
   Serial.println("LoRcore V3 System Ready! ");
