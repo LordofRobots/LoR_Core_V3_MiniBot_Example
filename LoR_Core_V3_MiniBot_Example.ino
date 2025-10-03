@@ -304,6 +304,7 @@ enum MotorType {
   STD_SERVO,
   Victor_SPX,
   Talon_SRX,
+  SPARK_MAX,
   CUSTOM
 };
 
@@ -314,17 +315,18 @@ struct MotorTypeConfig {  // define the config structure
   int maxPulseUs;
   float inputMin;
   float inputMax;
-
 };
 
 MotorTypeConfig motorTypeConfigs[] = {
   // define specific motor config parameters {NAME, FREQ, MINms, MAXms}
-  { MG90_CR, 50, 500, 2500, -1, 1},
-  { MG90_Degree, 50, 500, 2500, 1, 180},
+  { MG90_CR, 50, 500, 2500, -1, 1 },
+  { MG90_Degree, 50, 500, 2500, 1, 180 },
   { N20Plus, 50, 1000, 2000, -1, 1 },
   { Victor_SPX, 50, 1000, 2000, -1, 1 },
-  { Talon_SRX, 50, 1000, 2000, -1, 1 },
-  { STD_SERVO, 50, 1000, 2000 },
+  { Talon_SRX, 50, 1000, 2000 - 1, 1 },
+  { STD_SERVO, 50, 1000, 2000 - 1, 1 },
+  { SPARK_MAX, 50, 1000, 2000 - 1, 1 },
+
   // add more types as needed
 };
 
@@ -342,20 +344,19 @@ void ConfigureMotorOutput(uint8_t slot, MotorType motorType, int startupPosition
       maxPulseUs = cfg.maxPulseUs;
       break;
     }
+
+    uint8_t pin = IO_PINS[slot];
+    pinMode(pin, OUTPUT);
+
+    MotorOutput[slot].setPeriodHertz(pwmFreq);
+    MotorOutput[slot].attach(pin, minPulseUs, maxPulseUs);
+    MotorOutput[slot].writeMicroseconds(1500);  // center on attach
+
+    Serial.printf(
+      "Motor slot %d configured on pin %d as type %d: freq=%.1f Hz, pulse=%d-%d us, start=%d deg\n",
+      slot, pin, motorType, pwmFreq, minPulseUs, maxPulseUs, startupPositionDeg);
   }
-
-  uint8_t pin = IO_PINS[slot];
-  pinMode(pin, OUTPUT);
-
-  MotorOutput[slot].setPeriodHertz(pwmFreq);
-  MotorOutput[slot].attach(pin, minPulseUs, maxPulseUs);
-  MotorOutput[slot].write(startupPositionDeg);
-
-  Serial.printf(
-    "Motor slot %d configured on pin %d as type %d: freq=%.1f Hz, pulse=%d-%d us, start=%d deg\n",
-    slot, pin, motorType, pwmFreq, minPulseUs, maxPulseUs, startupPositionDeg);
 }
-
 
 ////////////////////////////////////////////////////////////////////////////////////////////
 //                            Initialize LoR Core                                         //
@@ -412,7 +413,7 @@ void loop() {
   BP32.update();
 
   // --- Check LoRcore Battery status ---
-  LoRcore_BatteryMonitor(2, 3.0);
+  //LoRcore_BatteryMonitor(1, 3.0);
 
   // --- Gamepad Connected ---
   if (myController && myController->isConnected()) {
@@ -422,8 +423,8 @@ void loop() {
 
     // --- GamePad Input update ---
     //checks user switch to invert directions or not.
-    int currentLeft = (digitalRead(User_SW) == HIGH) ? myController->axisRY() * Low_Batt_Scaler : -myController->axisRY() * Low_Batt_Scaler;  
-    int currentRight = (digitalRead(User_SW) == HIGH) ? -myController->axisY() * Low_Batt_Scaler : myController->axisY() * Low_Batt_Scaler;   // INVERTED 
+    int currentLeft = (digitalRead(User_SW) == HIGH) ? myController->axisRY() * Low_Batt_Scaler : -myController->axisRY() * Low_Batt_Scaler;
+    int currentRight = (digitalRead(User_SW) == HIGH) ? -myController->axisY() * Low_Batt_Scaler : myController->axisY() * Low_Batt_Scaler;  // INVERTED
 
     // handles GamePad stick drift
     if (-50 < currentLeft && currentLeft < 50) currentLeft = 0;  // Deadband handling
