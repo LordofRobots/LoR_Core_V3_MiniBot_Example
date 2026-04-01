@@ -1,4 +1,4 @@
-// Lord of Robots - LoR Core V3 - AUG 3 2025
+// Lord of Robots - LoR Core V3 - APR 1 2025
 // Sample MiniBot Control Program with Bluetooth GamePad Interface
 
 ///////////////////////////////////////////////////////////////////////////////////////////
@@ -21,6 +21,8 @@
 // 6. Select COM Port and Upload
 //  - Process is automatic, Boot button is not reqired
 //  - If auto load fail, Manually enter Boot mode: Press and hold Boot Button, press and release the RST button, then release Boot Button
+//  - FIRST COMPILE and UPLOAD WILL TAKE A LONG TIME 3-5 MINUTES
+//
 // 7. Pair GamePad with LoR Core V3 (FIRST TIME ONLY)
 //  - Turn on LoR Core V3
 //  - Press and Hold User Button A + D. Press and release RST Button.
@@ -44,6 +46,8 @@
 #include <ESP32Servo.h>    // Servo PWM Core
 #include <FastLED.h>       // Addressable LED Core
 
+
+
 ////////////////////////////////////////////////////////////////////////////////////////////
 //                            AUX Port Config                                             //
 ////////////////////////////////////////////////////////////////////////////////////////////
@@ -54,7 +58,8 @@ const uint8_t AUX_PINS[9] = { 0, 5, 18, 23, 19, 22, 21, 1, 3 };  // AUX_PIN[slot
 //                            IO Port Config                                              //
 ////////////////////////////////////////////////////////////////////////////////////////////
 // --- IO_Port Pins ---
-const uint8_t IO_PINS[13] = { 0, 32, 25, 26, 27, 14, 12, 13, 15, 2, 4, 22, 21 };  // IO_PIN[slot_number]   note: slot 0 is imaginary
+constexpr uint8_t MAX_SLOTS = 13;
+const uint8_t IO_PINS[MAX_SLOTS] = { 0, 32, 25, 26, 27, 14, 12, 13, 15, 2, 4, 22, 21 };  // IO_PIN[slot_number]   note: slot 0 is imaginary
 
 ////////////////////////////////////////////////////////////////////////////////////////////
 //                         User Button and Switch Config                                  //
@@ -88,6 +93,70 @@ const uint8_t IO_PINS[13] = { 0, 32, 25, 26, 27, 14, 12, 13, 15, 2, 4, 22, 21 };
 #define CHIPSET WS2812B
 CRGB leds[LED_COUNT];
 uint8_t rainbowHue = 0;
+
+// 1. ENUM FIRST
+enum MotorType {
+  NFG,
+  MG90_CR,
+  MG90_Degree,
+  N20Plus,
+  STD_SERVO,
+  STD_SERVO_CR,
+  Victor_SPX,
+  Talon_SRX,
+  SPARK_MAX,
+  CUSTOM
+};
+
+// 2. HELPERS IMMEDIATELY AFTER
+inline bool isSpeedMotor(MotorType t) {
+  switch (t) {
+    case MG90_CR:
+    case STD_SERVO_CR:
+    case N20Plus:
+    case Victor_SPX:
+    case Talon_SRX:
+    case SPARK_MAX:
+    case CUSTOM:
+      return true;
+    default:
+      return false;
+  }
+}
+
+inline bool isPositionMotor(MotorType t) {
+  switch (t) {
+    case MG90_Degree:
+    case STD_SERVO:
+      return true;
+    default:
+      return false;
+  }
+}
+
+// 3. STRUCT
+struct MotorTypeConfig {
+  MotorType type;
+  float pwmFreq;
+  int minPulseUs;
+  int maxPulseUs;
+  float inputMin;
+  float inputMax;
+};
+
+// 4. CONFIG TABLE
+MotorTypeConfig motorTypeConfigs[] = {
+  { NFG,          50, 1000, 2000, -100, 100 },
+  { N20Plus,      50, 1000, 2000, -100, 100 },
+  { Victor_SPX,   50, 1000, 2000, -100, 100 },
+  { Talon_SRX,    50, 1000, 2000, -100, 100 },
+  { SPARK_MAX,    50, 1000, 2000, -100, 100 },
+  { MG90_CR,      50,  500, 2500, -100, 100 },
+  { MG90_Degree,  50,  500, 2500,    0, 180 },
+  { STD_SERVO,    50,  500, 2500,    0, 180 },
+  { STD_SERVO_CR, 50,  500, 2500, -100, 100 },
+  { CUSTOM,       50, 1000, 2000, -100, 100 },
+};
 
 ////////////////////////////////////////////////////////////////////////////////////////////
 //                            Initalize Interal features                                  //
@@ -219,7 +288,6 @@ void INIT_BluetoothGamepad_PairMode() {  // Setup the Bluepad32 callbacks
 ////////////////////////////////////////////////////////////////////////////////////////////
 //                            Input voltage / Battery monitor                             //
 ////////////////////////////////////////////////////////////////////////////////////////////
-float Low_Batt_Scaler = 0.25;
 unsigned long TriggerTime = 0;
 bool Scaler_StepState = 0;
 unsigned long Check_Period_TriggerTime = 0;
@@ -241,19 +309,14 @@ float LoRcore_BatteryMonitor(uint8_t cellCount, float perCellLowV = 3.0, bool DE
     if (millis() > TriggerTime) {
 
       if (Scaler_StepState) {
-        Low_Batt_Scaler = 0;
       } else {
-        Low_Batt_Scaler = 0.25;
         fill_solid(leds, LED_COUNT, CRGB(255, 0, 0));
         FastLED.show();
         delay(100);
       }
-
       Scaler_StepState = !Scaler_StepState;
       TriggerTime = millis() + 100;
     }
-  } else {
-    Low_Batt_Scaler = 1.0;
   }
   return vin_voltage;
 }
@@ -296,68 +359,49 @@ void Powerup_Diagnostics_LED() {  // System check on boot cause and report
 //                               Servo/ Motor Config                                      //
 ////////////////////////////////////////////////////////////////////////////////////////////
 
-//Names of Predefined Motor types
-enum MotorType {
-  MG90_CR,
-  MG90_Degree,
-  N20Plus,
-  STD_SERVO,
-  Victor_SPX,
-  Talon_SRX,
-  SPARK_MAX,
-  CUSTOM
-};
-
-struct MotorTypeConfig {  // define the config structure
-  MotorType type;
-  float pwmFreq;
-  int minPulseUs;
-  int maxPulseUs;
-  float inputMin;
-  float inputMax;
-};
-
-MotorTypeConfig motorTypeConfigs[] = {
-  // define specific motor config parameters {NAME, FREQ, MINms, MAXms}
-  { MG90_CR, 50, 500, 2500, -1, 1 },
-  { MG90_Degree, 50, 500, 2500, 1, 180 },
-  { N20Plus, 50, 1000, 2000, -1, 1 },
-  { Victor_SPX, 50, 1000, 2000, -1, 1 },
-  { Talon_SRX, 50, 1000, 2000 - 1, 1 },
-  { STD_SERVO, 50, 1000, 2000 - 1, 1 },
-  { SPARK_MAX, 50, 1000, 2000 - 1, 1 },
-
-  // add more types as needed
-};
-
 //--- Configure motors function --- //
-void ConfigureMotorOutput(uint8_t slot, MotorType motorType, int startupPositionDeg = 90) {
-  // Lookup the config
-  float pwmFreq = 50;
-  int minPulseUs = 1000;
-  int maxPulseUs = 2000;
+MotorType motorTypeBySlot[MAX_SLOTS] = { NFG };
+void ConfigureMotorOutput(uint8_t slot, MotorType type, int startupPositionDeg = 90) {
+  if (slot == 0 || slot >= MAX_SLOTS) return;
 
   for (auto &cfg : motorTypeConfigs) {
-    if (cfg.type == motorType) {
-      pwmFreq = cfg.pwmFreq;
-      minPulseUs = cfg.minPulseUs;
-      maxPulseUs = cfg.maxPulseUs;
-      break;
+    if (cfg.type == type) {
+      motorTypeBySlot[slot] = type;
+
+      uint8_t pin = IO_PINS[slot];
+      pinMode(pin, OUTPUT);
+
+      MotorOutput[slot].setPeriodHertz(cfg.pwmFreq);
+      MotorOutput[slot].attach(pin, cfg.minPulseUs, cfg.maxPulseUs);
+      MotorOutput[slot].writeMicroseconds(1500);
+      
+      Serial.printf(
+        "Motor slot %d configured on pin %d as type %d: freq=%.1f Hz, pulse=%d-%d us, start=%d deg\n",
+        slot, pin, type, cfg.pwmFreq, cfg.minPulseUs, cfg.maxPulseUs, startupPositionDeg
+      );
+      return;
     }
-
-    uint8_t pin = IO_PINS[slot];
-    pinMode(pin, OUTPUT);
-
-    MotorOutput[slot].setPeriodHertz(pwmFreq);
-    MotorOutput[slot].attach(pin, minPulseUs, maxPulseUs);
-    MotorOutput[slot].writeMicroseconds(1500);  // center on attach
-
-    Serial.printf(
-      "Motor slot %d configured on pin %d as type %d: freq=%.1f Hz, pulse=%d-%d us, start=%d deg\n",
-      slot, pin, motorType, pwmFreq, minPulseUs, maxPulseUs, startupPositionDeg);
   }
+
+  Serial.printf("ERROR: No config found for slot %d type %d\n", slot, type);
 }
 
+
+// Control a motor's SPEED on slot # using value between -100 to 100 where -# is inverted direction ti +#
+void MotorSpeed_Set(uint8_t slot, int Speed_value) {
+  if (slot >= MAX_SLOTS || slot == 0) return;
+  MotorType t = motorTypeBySlot[slot];
+  if (!isSpeedMotor(t)) return;  // skip invalid slot/type
+  MotorOutput[slot].write(constrain(map(Speed_value, -100, 100, 0, 180), 0, 180));
+}
+
+// Control a servo on POSITIONslot # using value between -100 to 100 where -# is inverted direction ti +#
+void MotorPosition_Set(uint8_t slot, int position_value) {
+  if (slot >= MAX_SLOTS || slot == 0) return;
+  MotorType t = motorTypeBySlot[slot];
+  if (!isPositionMotor(t)) return;  // skip invalid slot/type
+  MotorOutput[slot].write(constrain(position_value, 0, 180));
+}
 ////////////////////////////////////////////////////////////////////////////////////////////
 //                            Initialize LoR Core                                         //
 ////////////////////////////////////////////////////////////////////////////////////////////
@@ -383,19 +427,19 @@ void setup() {
   // --- IO outputs ---
   Serial.println("Motors Startup");
 
-  ConfigureMotorOutput(1, N20Plus, 90);
-  ConfigureMotorOutput(2, N20Plus, 90);
-  ConfigureMotorOutput(3, N20Plus, 90);
-  ConfigureMotorOutput(4, N20Plus, 90);
-  ConfigureMotorOutput(5, N20Plus, 90);
-  ConfigureMotorOutput(6, N20Plus, 90);
-  ConfigureMotorOutput(7, N20Plus, 90);
-  ConfigureMotorOutput(8, N20Plus, 90);
-  ConfigureMotorOutput(9, N20Plus, 90);
-  ConfigureMotorOutput(10, N20Plus, 90);
-  ConfigureMotorOutput(11, N20Plus, 90);
-  ConfigureMotorOutput(12, N20Plus, 90);
-
+  ConfigureMotorOutput(1, MG90_CR, 90);
+  ConfigureMotorOutput(2, MG90_CR, 0);
+  ConfigureMotorOutput(3, MG90_CR, 0);
+  ConfigureMotorOutput(4, MG90_CR, 0);
+  ConfigureMotorOutput(5, MG90_CR, 0);
+  ConfigureMotorOutput(6, MG90_CR, 0);
+  ConfigureMotorOutput(7, MG90_CR, 0);
+  ConfigureMotorOutput(8, MG90_CR, 0);
+  ConfigureMotorOutput(9, MG90_CR, 90);
+  ConfigureMotorOutput(10, MG90_CR, 0);
+  ConfigureMotorOutput(11, MG90_CR, 0);
+  ConfigureMotorOutput(12, MG90_CR, 0);
+  
   // --- System Start Complete ---
   Serial.println("LoRcore V3 System Ready! ");
 }
@@ -413,7 +457,7 @@ void loop() {
   BP32.update();
 
   // --- Check LoRcore Battery status ---
-  //LoRcore_BatteryMonitor(1, 3.0);
+  LoRcore_BatteryMonitor(1, 3.0);
 
   // --- Gamepad Connected ---
   if (myController && myController->isConnected()) {
@@ -423,34 +467,38 @@ void loop() {
 
     // --- GamePad Input update ---
     //checks user switch to invert directions or not.
-    int currentLeft = (digitalRead(User_SW) == HIGH) ? myController->axisRY() * Low_Batt_Scaler : -myController->axisRY() * Low_Batt_Scaler;
-    int currentRight = (digitalRead(User_SW) == HIGH) ? -myController->axisY() * Low_Batt_Scaler : myController->axisY() * Low_Batt_Scaler;  // INVERTED
+    int currentLeft = (digitalRead(User_SW) == HIGH) ? -myController->axisY() : myController->axisY();
+    int currentRight = (digitalRead(User_SW) == HIGH) ? myController->axisRY() : -myController->axisRY();  // INVERTED
 
-    // handles GamePad stick drift
-    if (-50 < currentLeft && currentLeft < 50) currentLeft = 0;  // Deadband handling
-    if (-50 < currentRight && currentRight < 50) currentRight = 0;
+    // handles GamePad stick drift (full range -512 to 512)
+    int JoyStick_DEADBAND = 100;
+    if (-JoyStick_DEADBAND < currentLeft && currentLeft < JoyStick_DEADBAND) currentLeft = 0;  // Deadband handling
+    if (-JoyStick_DEADBAND < currentRight && currentRight < JoyStick_DEADBAND) currentRight = 0;
 
     // converts from Gamepad joysitck values to motor values
-    int MappedLeft = map(currentLeft, -512, 512, 0, 180);  // Map Gamepad data to Servo range
-    int MappedRight = map(currentRight, -512, 512, 0, 180);
+    int MappedLeft = constrain(map(currentLeft, -512, 512, -100, 100), -100, 100);  // Map Gamepad data to Servo range
+    int MappedRight = constrain(map(currentRight, -512, 512, -100, 100), -100, 100);
 
-    MappedLeft = constrain(MappedLeft, 0, 180);
-    MappedRight = constrain(MappedRight, 0, 180);
+    // --- motion update ---
+    // Speed example:    MotorSpeed_Set(uint8_t slot, int Speed_value); Speed_value = a motor speed; -100 to 100 where 0 is stop
+    // Position example:   MotorPosition_Set(uint8_t slot, int position_value); position_value = a motor speed; 0 to 180 where 90 is center position
+    
+    MotorSpeed_Set(1, MappedRight);
+    MotorSpeed_Set(2, MappedRight);
+    MotorSpeed_Set(3, MappedRight);
+    MotorSpeed_Set(4, MappedRight);
+    MotorSpeed_Set(5, MappedRight);
+    MotorSpeed_Set(6, MappedRight);
 
-    // --- Servo motion update ---
-    // example: MotorOutput[1].write(value); value = a servo position or motor speed; 0-180 where 90 is center position or stop
-    MotorOutput[1].write(MappedLeft);
-    MotorOutput[2].write(MappedLeft);
-    MotorOutput[3].write(MappedLeft);
-    MotorOutput[4].write(MappedLeft);
-    MotorOutput[5].write(MappedLeft);
-    MotorOutput[6].write(MappedLeft);
-    MotorOutput[7].write(MappedRight);
-    MotorOutput[8].write(MappedRight);
-    MotorOutput[9].write(MappedRight);
-    MotorOutput[10].write(MappedRight);
-    MotorOutput[11].write(MappedRight);
-    MotorOutput[12].write(MappedRight);
+    MotorSpeed_Set(7, MappedLeft);
+    MotorSpeed_Set(8, MappedLeft);
+    MotorSpeed_Set(9, MappedLeft);
+    MotorSpeed_Set(10, MappedLeft);
+    MotorSpeed_Set(11, MappedLeft);
+    MotorSpeed_Set(12, MappedLeft);
+
+    // view Joystick values in serial monitor
+    Serial.printf("Gamepad Inputs: Left Joystick %d   Right Joystick: %d", MappedLeft, MappedRight      );
 
     // --- Rainbow LED animation  ---
     fill_rainbow(leds, LED_COUNT, rainbowHue++, 20);
@@ -462,8 +510,8 @@ void loop() {
 
   // --- Gamepad Disconnected ---
   else {
-    for (int i = 1; i <= 12; i++) {
-      MotorOutput[i].write(90);  //stop motors
+    for (int i = 1; i <= 12; i++) { // SETS ALL SLOTS
+      MotorOutput[i].write(90);  //stop motors or centers position servos
     }
     fill_solid(leds, LED_COUNT, CRGB(0, 80, 255));  // ICY BLUE Led = Waiting for gamepad bluetooth connection
     FastLED.show();
