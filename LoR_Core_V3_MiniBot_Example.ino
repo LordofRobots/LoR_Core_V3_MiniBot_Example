@@ -1,4 +1,4 @@
-// Lord of Robots - LoR Core V3 - APR 1 2025
+// Lord of Robots - LoR Core V3 - APR 2 2026
 // Sample MiniBot Control Program with Bluetooth GamePad Interface
 
 ///////////////////////////////////////////////////////////////////////////////////////////
