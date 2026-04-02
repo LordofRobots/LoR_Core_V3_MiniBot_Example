@@ -1,519 +1,300 @@
-# LoR Core V3 – MiniBot Example
-Sample Arduino sketch for the **LoR Core V3** using a Bluetooth gamepad via **Bluepad32**, **ESP32Servo**, and **FastLED**.
+# LoR Core V3 MiniBot Bluetooth Gamepad Example
 
-- Main sketch: `LoR_Core_V3_MiniBot_Example.ino`
-- Target board: **esp32_bluepad32 / ESP32 Dev Module**
-- Serial baud: **115200**
-- License: **Apache-2.0** (see `LICENSE`)
+This example exists to help users get MiniBot projects running quickly on the **LoR Core V3** with as little setup work as possible. It gives a working baseline for Bluetooth gamepad control, motor output configuration, battery monitoring, and system status feedback so a user can start with a known-good project and then expand it for their own robot. Based on the provided code fileciteturn0file0
 
----
+## What this code is
 
-## Requirements
-- **Arduino IDE 2.x**
-- **LoR Core V3** controller + USB cable
-- **Bluetooth gamepad**
-- (If needed) **CH340** USB driver
+This is a sample Arduino program for the **Lord of Robots LoR Core V3** that connects to a Bluetooth gamepad through **Bluepad32** and uses that gamepad to control a MiniBot. It also initializes the LoR Core hardware, configures motor output slots, monitors both robot and gamepad battery state, and provides LED feedback for important system states such as startup, pairing, connected, disconnected, and low battery. fileciteturn0file0
 
----
+## What this code does
 
-## Download the code (ZIP)
-1. On the repo page, click **Code ▸ Download ZIP**.  
-2. Unzip to a folder.  
-3. Open `LoR_Core_V3_MiniBot_Example.ino` in Arduino IDE.  
-> Keep the folder name the same as the `.ino` file.
+At a high level, the code:
 
----
+- Initializes the LoR Core V3 internal hardware features
+- Starts Bluetooth gamepad support
+- Supports a special pairing mode using onboard buttons
+- Configures all 12 output slots as motor outputs
+- Reads joystick values from the connected gamepad
+- Maps joystick values into motor commands
+- Drives the MiniBot in a tank-drive style layout
+- Monitors robot battery voltage
+- Monitors gamepad battery level
+- Uses onboard LEDs to communicate system state and status
+- Stops all outputs when the gamepad disconnects fileciteturn0file0
 
-## Read the setup notes in the sketch
-Open the `.ino` and read the header block at the top. The steps below mirror those instructions.
+## How the MiniBot is controlled
 
----
+This example uses a **tank drive** style control scheme.
 
-## Environment setup (matches the sketch header)
+- The **left joystick Y axis** controls the left side of the robot
+- The **right joystick Y axis** controls the right side of the robot
+- Slots **1 to 6** are driven from the right joystick
+- Slots **7 to 12** are driven from the left joystick fileciteturn0file0
 
-### 1) Add Boards Manager URLs
-**File ▸ Preferences ▸ Additional Boards Manager URLs** → add each on its own line:
-```
+The code first reads the joystick values from the gamepad, applies optional inversion based on the LoR Core user switch, removes small joystick drift using a deadband, and then maps the joystick values from the Bluepad32 range of about **-512 to 512** into a motor command range of **-100 to 100**. Those mapped values are then sent to the configured motor slots using `MotorSpeed_Set()`. fileciteturn0file0
 
-[https://dl.espressif.com/dl/package\_esp32\_index.json](https://dl.espressif.com/dl/package_esp32_index.json)
-[https://raw.githubusercontent.com/ricardoquesada/esp32-arduino-lib-builder/master/bluepad32\_files/package\_esp32\_bluepad32\_index.json](https://raw.githubusercontent.com/ricardoquesada/esp32-arduino-lib-builder/master/bluepad32_files/package_esp32_bluepad32_index.json)
+If the gamepad disconnects, the code immediately writes a neutral value to every output slot so the robot stops safely. fileciteturn0file0
 
-```
+## Gamepad input functions: `myController->...`
 
-### 2) Install board packages (Boards Manager)
-**Tools ▸ Board ▸ Boards Manager…**
-- Install **“esp32” by Espressif Systems**
-- Install **“esp32_bluepad32” by Ricardo Quesada**
+The variable `myController` is a Bluepad32 controller pointer. It gives access to all of the live gamepad data once a controller is connected. The code includes a reference block showing the main functions available. fileciteturn0file0
 
-### 3) Install libraries (Library Manager)
-**Sketch ▸ Include Library ▸ Manage Libraries…**
-- **FastLED** by Daniel Garcia — **Latest**
-- **ESP32Servo** by Kevin Harrington, John K. Bennett — **Version 3.0.7**  
-  *(Note: 3.0.8 does not work due to ESP32 LEDC handling changes.)*
+### Common button and axis functions
 
-### 4) (If needed) Install CH340 USB driver
-If the board/port doesn’t appear under **Tools ▸ Port**, install:
-- CH340: `https://www.wch-ic.com/download/file?id=65`  
-Reconnect USB and restart IDE.
+#### `myController->buttons()`
+Returns a **bitmask** of the main gamepad buttons currently pressed. This is used when you want to check buttons such as A, B, X, Y, shoulder buttons, or other primary controls.
 
-### 5) Select the **correct** target board
-**Tools ▸ Board** → **USE**: `esp32_bluepad32 / ESP32 Dev Module`  
-**DO NOT USE**: `esp32 / ESP32 Dev Module`
+Typical use case:
+- Triggering an arm action
+- Starting an intake
+- Firing a mechanism
+- Selecting a mode
 
-### 6) Select COM port and upload
-**Tools ▸ Port** → choose the LoR Core V3 port.  
-Click **Upload**. The process is automatic (BOOT not required).  
-If it fails: hold **BOOT**, tap **RST**, release **BOOT** at “Connecting…”.
+#### `myController->dpad()`
+Returns a **bitmask** for the D-pad state.
 
-### 7) Pair the gamepad (first time only)
-1. Power **LoR Core V3**.  
-2. **Hold User Buttons A + D**, then press/release **RST**.  
-3. When LEDs **flash BLUE + WHITE**, release A + D (pair mode).  
-4. Put the **gamepad** into Bluetooth pairing mode.  
-5. Wait for **GREEN flash** → pairing done, returns to normal mode.  
-Notes: Auto-reconnect on future power-ups; BT keys are remembered across power cycles and uploads.
+Typical use case:
+- Step-by-step control
+- Menu navigation
+- Simple directional commands
+- Discrete movement commands
 
-### 8) LED status reference
-- **ICE BLUE** — Waiting / disconnected  
-- **RED** — Error / disconnect event  
-- **GREEN** — System OK / acknowledge  
-- **RAINBOW** — Receiving gamepad data  
-- **FLASH BLUE + WHITE** — Pair mode
+#### `myController->axisX()`
+Left joystick horizontal axis.
 
----
+Typical use case:
+- Steering
+- Strafing
+- Turret rotation
+- Menu navigation with analog feel
 
-## Build, upload, and run
-1. Confirm **Board** = `esp32_bluepad32 / ESP32 Dev Module` and correct **Port**.  
-2. **Verify** (✔) then **Upload** (→).  
-3. Open **Serial Monitor** at **115200**.  
-4. If not yet paired, follow **Step 7**.
+#### `myController->axisY()`
+Left joystick vertical axis.
 
----
+Typical use case:
+- Left side tank drive
+- Forward/backward motion input
+- Lift or arm speed control
 
-## What the sketch does
-- Initializes watchdog, LEDs (FastLED), servos (ESP32Servo), and Bluepad32.
-- Drives **left** (slots 1–6) and **right** (slots 7–12) motor groups from gamepad sticks.
-  - Deadband ±50 around center; map to **0–180** with **90 = stop/center**.
-- **User_SW** toggles drive inversion.
-- Battery monitor on **VIN_SENSE (GPIO 34)** logs VIN and scales output on low voltage.
-- LED colors reflect state (see above).
+#### `myController->axisRX()`
+Right joystick horizontal axis.
 
----
+Typical use case:
+- Turning
+- Camera pan
+- Second mechanism analog control
 
-## Troubleshooting
-- **No COM Port** → different cable/USB port; install **CH340**; restart IDE.  
-- **Failed to connect** → manual boot: hold **BOOT**, tap **RST**, release **BOOT** at “Connecting…”.  
-- **Compile errors / missing headers** → re-check libraries (use **ESP32Servo 3.0.7**).  
-- **Garbled Serial** → set **115200** baud.
+#### `myController->axisRY()`
+Right joystick vertical axis.
 
----
+Typical use case:
+- Right side tank drive
+- Secondary drive control
+- Lift or arm speed control
 
-## Repo structure
-```
+#### `myController->throttle()`
+Reads the throttle trigger, usually in the range **0 to 1023**.
 
-LoR\_Core\_V3\_MiniBot\_Example/
-├─ LoR\_Core\_V3\_MiniBot\_Example.ino
-├─ LICENSE            # Apache-2.0
-└─ README.md
+Typical use case:
+- Proportional speed control
+- Variable servo position
+- Trigger-controlled mechanism
 
-```
+#### `myController->brake()`
+Reads the brake trigger, usually in the range **0 to 1023**.
 
----
+Typical use case:
+- Reverse trigger control
+- Secondary proportional control
+- Another analog input for mechanisms
 
+#### `myController->miscButtons()`
+Returns a bitmask of special buttons such as system, select, start, or similar controller-specific buttons.
 
-# LoR Core V3 MiniBot Example — Code Walkthrough
+Typical use case:
+- Mode switching
+- Safety enable
+- Calibration actions
+- Special commands
 
-Target board: `esp32_bluepad32 / ESP32 Dev Module`. Serial `115200`. Watchdog `3 s`. Single controller only.
+### Motion sensor functions
 
----
+These are available if supported by the connected controller:
 
-## 1) Environment and setup prerequisites
+- `myController->gyroX()`
+- `myController->gyroY()`
+- `myController->gyroZ()`
+- `myController->accelX()`
+- `myController->accelY()`
+- `myController->accelZ()`
 
-Mirrors the header comments. Required before compile/upload:
+Typical use case:
+- Motion-based control
+- Tilt control
+- Gesture input
+- Experimental control schemes fileciteturn0file0
 
-* Boards URLs:
-  `https://dl.espressif.com/dl/package_esp32_index.json`
-  `https://raw.githubusercontent.com/ricardoquesada/esp32-arduino-lib-builder/master/bluepad32_files/package_esp32_bluepad32_index.json`
-* Install boards: **esp32** (Espressif) and **esp32\_bluepad32** (Ricardo Quesada).
-* Libraries: **FastLED** (latest), **ESP32Servo v3.0.7** only. v3.0.8 breaks LEDC timing with current ESP32 core.
-* USB driver: CH340 if needed.
-* Board select: **esp32\_bluepad32 / ESP32 Dev Module**. Do **not** use the stock esp32 Dev Module.
-* Upload: auto. If it fails, hold **BOOT**, tap **RST**, release **BOOT**.
-* First-time pairing: hold **User A + D**, tap **RST**, release **A + D**, put gamepad in BT pair mode. Keys persist across reboots and uploads.
+## `MotorSpeed_Set()` vs `MotorPosition_Set()`
 
-LED legend:
+The code separates motor outputs into two categories:
 
-* Ice Blue = waiting/disconnected
-* Red = error/disconnect
-* Green = OK/ack
-* Rainbow = receiving input
-* Flash Blue/White = pair mode
+- **Speed-controlled outputs**
+- **Position-controlled outputs** fileciteturn0file0
 
----
+This is defined by the motor type configured for each slot.
 
-## 2) Libraries
+### `MotorSpeed_Set(uint8_t slot, int Speed_value)`
+
+This function is for devices where the command represents **speed and direction**.
+
+Expected input:
+- `-100` to `100`
+- `0` means stop
+- Negative values reverse direction
+- Positive values drive forward fileciteturn0file0
+
+The function first checks whether the selected slot is configured as a valid speed-type motor. If not, it does nothing. If valid, it maps `-100 to 100` into the servo-style command range of `0 to 180` and writes that output. fileciteturn0file0
+
+Use `MotorSpeed_Set()` for:
+- Continuous rotation servos
+- N20Plus motor controllers
+- Victor SPX
+- Talon SRX
+- SPARK MAX
+- Other speed-based motor controllers
+- Drive motors
+- Intake motors
+- Flywheels
+- Conveyors
+- Any output where you want continuous motion instead of a target angle fileciteturn0file0
+
+### `MotorPosition_Set(uint8_t slot, int position_value)`
+
+This function is for devices where the command represents a **target position**.
+
+Expected input:
+- `0` to `180` degrees fileciteturn0file0
+
+The function checks whether the selected slot is configured as a valid position-type output. If not, it does nothing. If valid, it writes the constrained position value directly to the output. fileciteturn0file0
+
+Use `MotorPosition_Set()` for:
+- Standard hobby servos
+- Positional MG90 servos
+- Mechanisms that need a specific angle
+- Arms
+- Grippers
+- Gates
+- Linkages
+- Camera tilt or pan systems fileciteturn0file0
+
+### Practical difference
+
+Use **`MotorSpeed_Set()`** when you want something to keep spinning.
+
+Use **`MotorPosition_Set()`** when you want something to move to and hold a specific angle.
+
+Examples:
+- Drive wheel motor controller → `MotorSpeed_Set()`
+- Intake roller → `MotorSpeed_Set()`
+- Arm servo → `MotorPosition_Set()`
+- Claw open/close servo → `MotorPosition_Set()` fileciteturn0file0
+
+## Battery monitor functions
+
+This example includes two separate battery monitoring features.
+
+### 1. Gamepad battery monitor: `GamePad_BatteryMonitor()`
+
+This function checks the controller battery once per second using `myController->battery()`. It then changes the gamepad LED color to show battery status. fileciteturn0file0
+
+Battery status behavior:
+- `0` → unknown battery state, LED set red
+- `<= 64` → low battery, LED red, rumble alert, serial warning, LoR Core LEDs flash red
+- `<= 128` → medium battery, LED yellow
+- `> 128` → good battery, LED green fileciteturn0file0
+
+Why it matters:
+- Warns the operator before the controller dies
+- Helps avoid unexpected disconnects during use
+- Gives visual feedback directly on the gamepad
+
+### 2. Robot battery monitor: `LoRcore_BatteryMonitor()`
+
+This function reads the robot input voltage through the `VIN_SENSE` analog input and converts the ADC reading into an estimated input voltage using the configured slope and offset values. It also compares that measured voltage to a low-voltage threshold based on the battery cell count and per-cell minimum voltage. fileciteturn0file0
+
+In the main loop, it is called as:
 
 ```cpp
-#include <Bluepad32.h>     // Bluetooth gamepad stack and device abstraction
-#include "esp_task_wdt.h"  // Watchdog control
-#include <ESP32Servo.h>    // 50 Hz servo/RC PWM via LEDC
-#include <FastLED.h>       // WS2812B status LEDs
+LoRcore_BatteryMonitor(1, 3.0);
 ```
 
-Purpose: controller I/O, safety (WDT), motor PWM, visual status.
+That means:
+- Battery is being treated as a **1-cell system**
+- Low voltage warning threshold is **3.0 V per cell** fileciteturn0file0
 
----
+If the measured voltage drops below the threshold, the code:
+- Prints a low battery warning to serial
+- Flashes the onboard LEDs red as a warning fileciteturn0file0
 
-## 3) Pin maps
+Why it matters:
+- Protects the robot battery from over-discharge
+- Warns the user before the robot becomes unstable
+- Helps diagnose power issues during testing
 
-### AUX Port (not used in this sketch, reserved for future I/O)
+## Motor slot configuration
 
-```cpp
-const uint8_t AUX_PINS[9] = {0, 5, 18, 23, 19, 22, 21, 1, 3}; // slot index 1..8
-```
+Before the robot can be controlled, each output slot must be configured with a motor type using `ConfigureMotorOutput(slot, type)`. In this example, slots **1 through 12** are all configured as `N20Plus`. fileciteturn0file0
 
-### IO Ports for motor outputs (12 servo-style channels)
+That configuration determines:
+- What type of device is connected to the slot
+- Whether the slot accepts speed or position commands
+- PWM frequency
+- Pulse width range
+- Valid control behavior for that slot fileciteturn0file0
 
-```cpp
-const uint8_t IO_PINS[13] = {0, 32, 25, 26, 27, 14, 12, 13, 15, 2, 4, 22, 21}; // slots 1..12
-```
+This is why `MotorSpeed_Set()` and `MotorPosition_Set()` can safely reject invalid commands for the wrong device type.
 
-### User inputs
+## Bluetooth pairing and connection flow
 
-```cpp
-#define User_BTN_A 35
-#define User_BTN_B 39
-#define User_BTN_C 38
-#define User_BTN_D 37
-#define User_SW   36   // direction invert switch
-```
+The code supports normal reconnect behavior and a manual pairing mode.
 
-### Battery sense and LEDs
+### Normal startup
+On normal startup, Bluepad32 starts and waits for the paired controller to reconnect. fileciteturn0file0
 
-```cpp
-#define VIN_SENSE 34
-#define LED_PIN   33
-#define LED_COUNT 4
-```
+### Pairing mode
+If **User Button A** and **User Button D** are held during reset, the code:
+- Clears saved Bluetooth keys
+- Enables new Bluetooth pairing
+- Flashes the onboard LEDs blue and white
+- Waits until a controller connects
+- Disables new pairing again after connection fileciteturn0file0
 
----
+This gives the user a simple way to pair a new controller without changing code.
 
-## 4) Voltage model and calibration
+## LED status behavior
 
-```cpp
-#define VOLT_SLOPE  0.0063492
-#define VOLT_OFFSET 1.079
-```
+The onboard addressable LEDs are used as a status display.
 
-Reads `analogRead(VIN_SENSE)` and computes:
+Examples in this program:
+- Green on successful controller connection
+- Red on disconnect
+- Blue/white flashing during pairing mode
+- Rainbow animation while receiving live gamepad control
+- Icy blue while waiting for a gamepad connection
+- Red warning on low battery conditions fileciteturn0file0
 
-```
-VIN_volts = (ADC_raw * VOLT_SLOPE) + VOLT_OFFSET
-```
+## Typical MiniBot workflow
 
-Calibrated so \~6 V ≈ 775 counts and \~12 V ≈ 1720 counts on your board. Works with the on-board divider and ADC gain.
+A typical use flow for this example is:
 
----
+1. Upload the code to the LoR Core V3
+2. Power the board and pair the Bluetooth gamepad if needed
+3. Let the program initialize all configured motor slots
+4. Wait for gamepad connection
+5. Move the left and right joysticks to drive the MiniBot
+6. Watch LEDs and serial output for system status and battery warnings
+7. Expand the example by adding buttons, extra mechanisms, servos, or custom control logic fileciteturn0file0
 
-## 5) Status LED config
+## Summary
 
-```cpp
-#define BRIGHTNESS 255
-#define COLOR_ORDER GRB
-#define CHIPSET WS2812B
-CRGB leds[LED_COUNT];
-uint8_t rainbowHue = 0;
-```
-
-* Boot: clear and show.
-* Runtime: solid colors for states, rainbow when streaming inputs.
-
----
-
-## 6) Global objects and watchdog
-
-```cpp
-#define WDT_TIMEOUT 3
-Servo MotorOutput[13];      // channels 1..12 used
-ControllerPtr myController; // only one allowed
-```
-
-WDT is enabled with panic. `loop()` feeds it each cycle.
-
----
-
-## 7) INIT\_InternalFeatures()
-
-* Starts Serial 115200.
-* Enables WDT and registers current task.
-* Sets all button and sensor pins to input.
-* Initializes FastLED (clears, shows).
-
----
-
-## 8) Bluepad32 controller lifecycle
-
-### onConnectedController(ctl)
-
-* Accepts only if `myController == nullptr`. Otherwise rejects the extra device.
-* Haptic “shake” and gamepad LED set to green.
-* Disables **new** BT connections (`enableNewBluetoothConnections(false)`) to enforce single-device policy.
-* Board LEDs → Green for 500 ms.
-
-### onDisconnectedController(ctl)
-
-* If it is the tracked controller, clear `myController` and show Red for 1 s.
-
-### GamePad\_BatteryMonitor()
-
-* Throttled to 1 Hz.
-* Uses `ctl->battery()` (0–255). Thresholds:
-
-  * 0 → unknown → gamepad LED Red.
-  * ≤64 (\~25%) → Red, rumble once, board LEDs Red flash.
-  * ≤128 (\~50%) → Yellow.
-  * Else → Green.
-
-### INIT\_BluetoothGamepad\_PairMode()
-
-* If **User A + D** are held at boot:
-
-  * `BP32.forgetBluetoothKeys()` to force clean pairing.
-  * `enableNewBluetoothConnections(true)` and `BP32.setup(...)`.
-  * Loop until a controller connects:
-
-    * Feed WDT.
-    * Flash board LEDs Blue ↔ White.
-    * `BP32.update()`.
-  * Then disable new connections.
-* Else: normal `BP32.setup(...)`.
-* Always: `BP32.enableVirtualDevice(false)` to block virtual HID.
-
-**Net effect:** exactly one remembered gamepad, no multi-pairing, no virtual devices.
-
----
-
-## 9) Battery monitor and power-derate
-
-```cpp
-float Low_Batt_Scaler = 0.25;  // runtime scaling factor for motor commands
-unsigned long TriggerTime = 0;
-bool Scaler_StepState = 0;
-unsigned long Check_Period_TriggerTime = 0;
-
-float LoRcore_BatteryMonitor(uint8_t cellCount, float perCellLowV=3.0, bool DEBUG=true)
-```
-
-Flow:
-
-1. Read ADC → compute `vin_voltage`.
-2. Threshold = `cellCount * perCellLowV` (e.g., 2S at 3.0 V/cell → 6.0 V).
-3. Log every 500 ms if `DEBUG`.
-4. If voltage **below** threshold:
-
-   * Print “LOW Battery”.
-   * Every 100 ms, toggle `Scaler_StepState` and set `Low_Batt_Scaler` to `0` or `0.25`.
-     Also brief Red flash.
-   * Result: pulsing drive inhibition to protect pack and alert user.
-5. If above threshold: `Low_Batt_Scaler = 1.0`.
-
-Return value: measured VIN (float volts).
-
----
-
-## 10) Powerup\_Diagnostics\_LED()
-
-Maps `esp_reset_reason()` to LED colors once at boot:
-
-* Watchdog → White
-* Brownout → Yellow (holds 3 s)
-* Power-on → Green
-* Software reset → Blue
-* Panic → Red
-* Unknown → Purple
-  Then LEDs off.
-
----
-
-## 11) Motor type system
-
-### Enum and config table
-
-```cpp
-enum MotorType { MG90_CR, MG90_Degree, N20Plus, STD_SERVO, Victor_SPX, Talon_SRX, CUSTOM };
-
-struct MotorTypeConfig {
-  MotorType type;
-  float pwmFreq;  int minPulseUs; int maxPulseUs;
-  float inputMin; float inputMax; // reserved
-};
-
-MotorTypeConfig motorTypeConfigs[] = {
-  { MG90_CR,   50,  500, 2500, -1,  1 },
-  { MG90_Degree,50, 500, 2500,  1, 180},
-  { N20Plus,    50, 1000,2000, -1,  1 },
-  { Victor_SPX, 50, 1000,2000, -1,  1 },
-  { Talon_SRX,  50, 1000,2000, -1,  1 },
-  { STD_SERVO,  50, 1000,2000 },
-};
-```
-
-* Unifies PWM period and pulse limits per device family.
-* `inputMin/inputMax` fields are placeholders for future mapping logic.
-
-### ConfigureMotorOutput(slot, type, startupPositionDeg)
-
-1. Look up `pwmFreq`, pulse range for `type`.
-2. `pinMode(IO_PINS[slot], OUTPUT)`.
-3. `Servo.setPeriodHertz(pwmFreq)`, `attach(pin, min, max)`.
-4. Write `startupPositionDeg` (default 90).
-5. Log the full config.
-
-In `setup()`, slots 1..12 are all configured as `N20Plus` at center (90 deg).
-
----
-
-## 12) INIT\_LoRcore()
-
-Calls, in order:
-
-1. `INIT_InternalFeatures()`
-2. `Powerup_Diagnostics_LED()`
-3. `INIT_BluetoothGamepad_PairMode()`
-
----
-
-## 13) setup()
-
-* Runs `INIT_LoRcore()`.
-* Logs “Motors Startup”.
-* Configures all 12 motor channels as `N20Plus`, 50 Hz, 1000–2000 μs, starting at 90 deg.
-* Logs “System Ready”.
-
----
-
-## 14) loop()
-
-Core cycle:
-
-1. **WDT feed**
-
-   ```cpp
-   esp_task_wdt_reset();
-   ```
-2. **Bluepad32 service**
-
-   ```cpp
-   BP32.update();
-   ```
-3. **Battery check**
-
-   ```cpp
-   LoRcore_BatteryMonitor(2, 3.0); // 2S pack, 3.0 V/cell threshold
-   ```
-4. **If controller connected**
-
-   * Run `GamePad_BatteryMonitor()` (1 Hz visual + haptic).
-   * Read sticks with optional inversion:
-
-     ```cpp
-     // User_SW HIGH = normal, LOW = inverted
-     int currentLeft  = (digitalRead(User_SW)==HIGH) ?  myController->axisRY() : -myController->axisRY();
-     int currentRight = (digitalRead(User_SW)==HIGH) ? -myController->axisY()  :  myController->axisY(); // right stick inverted
-     // Apply low-batt scaler
-     currentLeft  *= Low_Batt_Scaler;
-     currentRight *= Low_Batt_Scaler;
-     ```
-   * Deadband ±50 to remove drift.
-   * Map to servo domain and clamp:
-
-     ```cpp
-     int MappedLeft  = constrain(map(currentLeft,  -512, 512, 0, 180), 0, 180);
-     int MappedRight = constrain(map(currentRight, -512, 512, 0, 180), 0, 180);
-     ```
-   * Drive outputs:
-
-     * Slots **1..6** = left
-     * Slots **7..12** = right
-     * `90` = stop, `0..90` = reverse, `90..180` = forward (per your driver’s convention).
-   * LED rainbow animation while active.
-   * `delay(50)` → \~20 Hz loop when connected.
-5. **If controller disconnected**
-
-   * Write `90` to all 12 channels to stop.
-   * LEDs Ice Blue (waiting).
-   * No blocking delay, so pairing can occur.
-
----
-
-## 15) Control mapping summary
-
-| Stick       | Axis | Sign (User\_SW=HIGH) | Channels       |
-| ----------- | ---- | -------------------- | -------------- |
-| Left drive  | RY   | +                    | 1,2,3,4,5,6    |
-| Right drive | Y    | inverted             | 7,8,9,10,11,12 |
-
-* Deadband: ±50 counts around center to suppress drift.
-* Scaling: `map(-512..+512 → 0..180)`, then `constrain`.
-* Low-battery behavior: `Low_Batt_Scaler` = `1.0` normal, toggles `0 ↔ 0.25` when below threshold, creating pulsed derate and red flashes.
-
----
-
-## 16) Safety and single-controller guarantees
-
-* Only one controller pointer (`myController`).
-* New BT connections disabled after connect.
-* Virtual devices disabled.
-* Motors forced to neutral on disconnect.
-* WDT active with 3 s timeout.
-* Brownout cause flagged on boot.
-
----
-
-## 17) Tuning knobs
-
-* **WDT\_TIMEOUT**: raise if doing heavier work per loop.
-* **Deadband**: change ±50 if your gamepad is driftier.
-* **Map range**: keep `-512..512` unless you confirm your controller’s full scale.
-* **Low-voltage**: set `perCellLowV` to 3.3 V for gentler cutoff, or 3.0 V for deeper discharge.
-* **LED\_COUNT/BRIGHTNESS**: adjust to your strip.
-
----
-
-## 18) Quick troubleshooting
-
-* Port missing → install CH340 driver.
-* Upload stuck → use BOOT+RST sequence.
-* Motors twitch or not centered → confirm each slot configured, pulse min/max correct, and initial write at 90.
-* Servo motion reversed → swap sign or swap motor leads per driver.
-* No BT pairing → hold **A + D** on boot to forget keys and re-pair.
-* Low-power pulsing under throttle → battery below threshold by design; charge or raise the threshold.
-* ESP resets → check reset cause in boot log and the color code in `Powerup_Diagnostics_LED()`.
-
----
-
-## 19) Extension points
-
-* Add more **MotorTypeConfig** entries for other ESCs/servos.
-* Use `inputMin/inputMax` fields to implement linearization or scaling per type.
-* Populate **AUX\_PINS** for sensors on I²C/SPI/UART as needed.
-* Gate outputs by `myController->throttle()` or buttons for modes.
-* Add a persistent calibration for `VOLT_SLOPE/OFFSET` per device.
-
-
-## License
-**Apache-2.0** — see `LICENSE`.
-
-Copyright 2025 Lord of Robots Inc.
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this project except in compliance with the License.
-You may obtain a copy of the License at:
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+This example is a fast-start control program for getting a MiniBot running with the LoR Core V3 and a Bluetooth gamepad. It handles hardware initialization, Bluetooth pairing and reconnects, joystick reading, tank drive motor control, motor type safety checks, robot battery monitoring, gamepad battery monitoring, and status LEDs in one baseline project. It is intended to be used as a starting point that users can quickly upload, test, understand, and build on. fileciteturn0file0
