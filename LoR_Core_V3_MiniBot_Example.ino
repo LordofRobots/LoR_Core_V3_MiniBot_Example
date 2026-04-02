@@ -94,7 +94,10 @@ const uint8_t IO_PINS[MAX_SLOTS] = { 0, 32, 25, 26, 27, 14, 12, 13, 15, 2, 4, 22
 CRGB leds[LED_COUNT];
 uint8_t rainbowHue = 0;
 
-// 1. ENUM FIRST
+////////////////////////////////////////////////////////////////////////////////////////////
+//                            Motor Config                                                  //
+////////////////////////////////////////////////////////////////////////////////////////////
+// 1. ENUM TYPES
 enum MotorType {
   NFG,
   MG90_CR,
@@ -108,7 +111,7 @@ enum MotorType {
   CUSTOM
 };
 
-// 2. HELPERS IMMEDIATELY AFTER
+// 2. HELPERS
 inline bool isSpeedMotor(MotorType t) {
   switch (t) {
     case MG90_CR:
@@ -146,16 +149,16 @@ struct MotorTypeConfig {
 
 // 4. CONFIG TABLE
 MotorTypeConfig motorTypeConfigs[] = {
-  { NFG,          50, 1000, 2000, -100, 100 },
-  { N20Plus,      50, 1000, 2000, -100, 100 },
-  { Victor_SPX,   50, 1000, 2000, -100, 100 },
-  { Talon_SRX,    50, 1000, 2000, -100, 100 },
-  { SPARK_MAX,    50, 1000, 2000, -100, 100 },
-  { MG90_CR,      50,  500, 2500, -100, 100 },
-  { MG90_Degree,  50,  500, 2500,    0, 180 },
-  { STD_SERVO,    50,  500, 2500,    0, 180 },
-  { STD_SERVO_CR, 50,  500, 2500, -100, 100 },
-  { CUSTOM,       50, 1000, 2000, -100, 100 },
+  { NFG, 50, 1000, 2000, -100, 100 },
+  { N20Plus, 50, 1000, 2000, -100, 100 },
+  { Victor_SPX, 50, 1000, 2000, -100, 100 },
+  { Talon_SRX, 50, 1000, 2000, -100, 100 },
+  { SPARK_MAX, 50, 1000, 2000, -100, 100 },
+  { MG90_CR, 50, 500, 2500, -100, 100 },
+  { MG90_Degree, 50, 500, 2500, 0, 180 },
+  { STD_SERVO, 50, 500, 2500, 0, 180 },
+  { STD_SERVO_CR, 50, 500, 2500, -100, 100 },
+  { CUSTOM, 50, 1000, 2000, -100, 100 },
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////
@@ -195,6 +198,26 @@ void INIT_InternalFeatures() {
 //                            bluepad 32 Config                                           //
 ////////////////////////////////////////////////////////////////////////////////////////////
 ControllerPtr myController = nullptr;  // Define a single controller pointer
+
+/*  ---- Game pad Button and axis Values ----
+
+        myController->index(),        // Controller Index
+        myController->dpad(),         // D-pad
+        myController->buttons(),      // bitmask of pressed buttons
+        myController->axisX(),        // (-511 - 512) left X Axis
+        myController->axisY(),        // (-511 - 512) left Y axis
+        myController->axisRX(),       // (-511 - 512) right X axis
+        myController->axisRY(),       // (-511 - 512) right Y axis
+        myController->brake(),        // (0 - 1023): brake button
+        myController->throttle(),     // (0 - 1023): throttle (AKA gas) button
+        myController->miscButtons(),  // bitmask of pressed "misc" buttons
+        myController->gyroX(),        // Gyro X
+        myController->gyroY(),        // Gyro Y
+        myController->gyroZ(),        // Gyro Z
+        myController->accelX(),       // Accelerometer X
+        myController->accelY(),       // Accelerometer Y
+        myController->accelZ()        // Accelerometer Z
+        */
 
 // --- Gamepad Connected ---
 void onConnectedController(ControllerPtr ctl) {
@@ -374,11 +397,10 @@ void ConfigureMotorOutput(uint8_t slot, MotorType type, int startupPositionDeg =
       MotorOutput[slot].setPeriodHertz(cfg.pwmFreq);
       MotorOutput[slot].attach(pin, cfg.minPulseUs, cfg.maxPulseUs);
       MotorOutput[slot].writeMicroseconds(1500);
-      
+
       Serial.printf(
         "Motor slot %d configured on pin %d as type %d: freq=%.1f Hz, pulse=%d-%d us, start=%d deg\n",
-        slot, pin, type, cfg.pwmFreq, cfg.minPulseUs, cfg.maxPulseUs, startupPositionDeg
-      );
+        slot, pin, type, cfg.pwmFreq, cfg.minPulseUs, cfg.maxPulseUs, startupPositionDeg);
       return;
     }
   }
@@ -427,19 +449,19 @@ void setup() {
   // --- IO outputs ---
   Serial.println("Motors Startup");
 
-  ConfigureMotorOutput(1, MG90_CR, 90);
-  ConfigureMotorOutput(2, MG90_CR, 0);
-  ConfigureMotorOutput(3, MG90_CR, 0);
-  ConfigureMotorOutput(4, MG90_CR, 0);
-  ConfigureMotorOutput(5, MG90_CR, 0);
-  ConfigureMotorOutput(6, MG90_CR, 0);
-  ConfigureMotorOutput(7, MG90_CR, 0);
-  ConfigureMotorOutput(8, MG90_CR, 0);
-  ConfigureMotorOutput(9, MG90_CR, 90);
-  ConfigureMotorOutput(10, MG90_CR, 0);
-  ConfigureMotorOutput(11, MG90_CR, 0);
-  ConfigureMotorOutput(12, MG90_CR, 0);
-  
+  ConfigureMotorOutput(1, N20Plus);
+  ConfigureMotorOutput(2, N20Plus);
+  ConfigureMotorOutput(3, N20Plus);
+  ConfigureMotorOutput(4, N20Plus);
+  ConfigureMotorOutput(5, N20Plus);
+  ConfigureMotorOutput(6, N20Plus);
+  ConfigureMotorOutput(7, N20Plus);
+  ConfigureMotorOutput(8, N20Plus);
+  ConfigureMotorOutput(9, N20Plus);
+  ConfigureMotorOutput(10, N20Plus);
+  ConfigureMotorOutput(11, N20Plus);
+  ConfigureMotorOutput(12, N20Plus);
+
   // --- System Start Complete ---
   Serial.println("LoRcore V3 System Ready! ");
 }
@@ -482,7 +504,7 @@ void loop() {
     // --- motion update ---
     // Speed example:    MotorSpeed_Set(uint8_t slot, int Speed_value); Speed_value = a motor speed; -100 to 100 where 0 is stop
     // Position example:   MotorPosition_Set(uint8_t slot, int position_value); position_value = a motor speed; 0 to 180 where 90 is center position
-    
+
     MotorSpeed_Set(1, MappedRight);
     MotorSpeed_Set(2, MappedRight);
     MotorSpeed_Set(3, MappedRight);
@@ -498,7 +520,10 @@ void loop() {
     MotorSpeed_Set(12, MappedLeft);
 
     // view Joystick values in serial monitor
-    Serial.printf("Gamepad Inputs: Left Joystick %d   Right Joystick: %d", MappedLeft, MappedRight      );
+    Serial.printf("Gamepad Inputs: Left Joystick %d   Right Joystick: %d \n", MappedLeft, MappedRight);
+
+    //Example: Control a servo's (slot 12) position with R2 or throttle on gamepad
+    // MotorPosition_Set(12, map(myController->throttle(), 0, 1023, 0, 180));
 
     // --- Rainbow LED animation  ---
     fill_rainbow(leds, LED_COUNT, rainbowHue++, 20);
@@ -510,8 +535,8 @@ void loop() {
 
   // --- Gamepad Disconnected ---
   else {
-    for (int i = 1; i <= 12; i++) { // SETS ALL SLOTS
-      MotorOutput[i].write(90);  //stop motors or centers position servos
+    for (int i = 1; i <= 12; i++) {  // SETS ALL SLOTS ON LoR CORE
+      MotorOutput[i].write(90);      //stop motors or centers position servos. THIS AFFECTS ALL SLOTS ON LoR CORE
     }
     fill_solid(leds, LED_COUNT, CRGB(0, 80, 255));  // ICY BLUE Led = Waiting for gamepad bluetooth connection
     FastLED.show();
